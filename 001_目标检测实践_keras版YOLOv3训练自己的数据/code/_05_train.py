@@ -1,22 +1,25 @@
+# 导入常用的库
 import os
 import numpy as np
+# 导入keras库
 import keras.backend as K
 from keras.layers import Input, Lambda
 from keras.models import Model
+# 导入yolo3文件夹中mode.py、utils.py这2个代码文件中的方法
 from yolo3.model import preprocess_true_boxes, yolo_body, yolo_loss
 from yolo3.utils import get_random_data
 
-# 从文本文件中解析出物体种类列表className_list，要求每个种类占一行
-def get_classNameList(txtFilePath):
+# 从文本文件中解析出物体种类列表category_list，要求每个种类占一行
+def get_categoryList(txtFilePath):
     with open(txtFilePath, 'r', encoding='utf8') as file:
         fileContent = file.read()
-        line_list = [k.strip() for k in fileContent.split('\n') if k.strip()!='']
-        className_list= sorted(line_list, reverse=False)
-    return className_list    
+    line_list = [k.strip() for k in fileContent.split('\n') if k.strip()!='']
+    category_list = sorted(line_list, reverse=False)
+    return category_list    
 
 # 从表示anchor的文本文件中解析出anchor_ndarray
-def get_anchorNdarray(anchorFilePath):
-    with open(anchorFilePath) as file:
+def get_anchorNdarray(anchor_txtFilePath):
+    with open(anchor_txtFilePath) as file:
         anchor_ndarray = [float(k) for k in file.read().split(',')]
     return np.array(anchor_ndarray).reshape(-1, 2)
 
@@ -26,7 +29,7 @@ def create_model(input_shape,
                  num_classes,
                  load_pretrained=True,
                  freeze_body=False,
-                 weights_path='saved_model/trained_weights.h5'):
+                 weights_h5FilePath='../resources/saved_models/trained_weights.h5'):
     K.clear_session() # get a new session
     image_input = Input(shape=(None, None, 3))
     height, width = input_shape
@@ -38,9 +41,9 @@ def create_model(input_shape,
     model_body = yolo_body(image_input, num_anchors//3, num_classes)
     print('Create YOLOv3 model with {} anchors and {} classes.'.format(num_anchors, num_classes))
 
-    if load_pretrained and os.path.exists(weights_path):
-        model_body.load_weights(weights_path, by_name=True, skip_mismatch=True)
-        print('Load weights {}.'.format(weights_path))
+    if load_pretrained and os.path.exists(weights_h5FilePath):
+        model_body.load_weights(weights_h5FilePath, by_name=True, skip_mismatch=True)
+        print('Load weights from this path: {}.'.format(weights_h5FilePath))
         if freeze_body:
             num = len(model_body.layers)-7
             for i in range(num):
@@ -63,7 +66,7 @@ def train(model,
           input_shape,
           anchor_ndarray,
           num_classes,
-          logDirPath='saved_model/'):
+          logDirPath='../resources/saved_models/'):
     model.compile(optimizer='adam',
                   loss={'yolo_loss': lambda y_true, y_pred: y_pred})
     # 划分训练集和验证集              
@@ -114,21 +117,21 @@ def parse_args():
     parser = argparse.ArgumentParser() 
     parser.add_argument('-w', '--width', type=int, default=416)
     parser.add_argument('-he', '--height', type=int, default=416)
-    parser.add_argument('-c', '--class_txtFilePath', type=str, default='../download_resources/className_list.txt')
-    parser.add_argument('-a', '--anchorFilePath', type=str, default='./model_data/yolo_anchors.txt')
+    parser.add_argument('-c', '--class_txtFilePath', type=str, default='../resources/category_list.txt')
+    parser.add_argument('-a', '--anchor_txtFilePath', type=str, default='./model_data/yolo_anchors.txt')
     argument_namespace = parser.parse_args()
     return argument_namespace  
         
 # 主函数
 if __name__ == '__main__':
     argument_namespace = parse_args()
-    classeFilePath = argument_namespace.class_txtFilePath
-    anchorFilePath = argument_namespace.anchorFilePath
-    className_list = get_classNameList(classeFilePath)
-    anchor_ndarray = get_anchorNdarray(anchorFilePath)
+    class_txtFilePath = argument_namespace.class_txtFilePath
+    anchor_txtFilePath = argument_namespace.anchor_txtFilePath
+    category_list = get_categoryList(class_txtFilePath)
+    anchor_ndarray = get_anchorNdarray(anchor_txtFilePath)
     width = argument_namespace.width
     height = argument_namespace.height
     input_shape = (width, height) # multiple of 32, height and width
-    model = create_model(input_shape, anchor_ndarray, len(className_list))
+    model = create_model(input_shape, anchor_ndarray, len(category_list))
     annotationFilePath = 'dataset_train.txt'
-    train(model, annotationFilePath, input_shape, anchor_ndarray, len(className_list))
+    train(model, annotationFilePath, input_shape, anchor_ndarray, len(category_list))
